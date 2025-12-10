@@ -4,6 +4,11 @@ project(BankingService)
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+add_subdirectory(other/googletest)
+
+enable_testing()
+add_subdirectory(tests)
+
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 
@@ -27,7 +32,13 @@ protobuf_generate(TARGET protolib LANGUAGE grpc GENERATE_EXTENSIONS .grpc.pb.h .
 
 add_executable(server src/server.cc)
 target_include_directories(server PRIVATE ${LIBPQXX_INCLUDE_DIRS})
-target_link_libraries(server PRIVATE protolib ${LIBPQXX_LIBRARIES} pq)
+target_link_libraries(
+    server
+    PRIVATE
+    protolib
+    ${LIBPQXX_LIBRARIES}
+    pq
+)
 
 
 add_executable(client src/client.cc)
