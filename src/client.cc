@@ -112,7 +112,7 @@ private:
 };
 
 int main(){
-    PaymentClient client(grpc::CreateChannel("localhost:9999", grpc::InsecureChannelCredentials()));
+    PaymentClient client(grpc::CreateChannel("localhost:50051", grpc::InsecureChannelCredentials()));
     while(true){
         std::cout << "What would you want to do? Enter a number:" << std::endl;
         std::cout << "1: To see your balance" << std::endl;

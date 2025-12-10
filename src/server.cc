@@ -1,4 +1,7 @@
 #include <grpcpp/grpcpp.h>
+#include <fstream>
+#include <sstream>
+#include <cstdlib>
 #include <memory>
 #include <string>
 #include "proto/payment_service.grpc.pb.h"
@@ -7,7 +10,34 @@
 using grpc::Server;
 using grpc::ServerBuilder;
 
-pqxx::connection conn("dbname=postgres user=postgres password=1234 host=host.docker.internal port=5432");
+void load_env(const std::string& filename = ".env") {
+    std::ifstream file(filename);
+    if (!file.is_open()) return;
+
+    std::string line;
+    while (std::getline(file, line)) {
+        if (line.empty() || line[0] == '#') continue;
+        size_t equal_pos = line.find('=');
+        if (equal_pos != std::string::npos) {
+            std::string key = line.substr(0, equal_pos);
+            std::string value = line.substr(equal_pos + 1);
+            setenv(key.c_str(), value.c_str(), true); // Overwrite if exists
+        }
+    }
+}
+
+std::string db_user = getenv("DB_USER");
+std::string db_pass = getenv("DB_PASSWORD");
+std::string db_name = getenv("DB_NAME");
+std::string db_host = getenv("DB_HOST");
+std::string db_port = getenv("DB_PORT");
+
+pqxx::connection conn("user=" + db_user +
+                        " password=" + db_pass +
+                        " dbname=" + db_name +
+                        " host=" + db_host +
+                        " port=" + db_port);
+
 pqxx::work txn(conn);
 
 class PaymentServiceImpl final : public payment::PaymentService::Service {
@@ -146,7 +176,7 @@ class PaymentServiceImpl final : public payment::PaymentService::Service {
 };
 
 void RunServer() {
-    std::string server_address("0.0.0.0:9999");
+    std::string server_address("0.0.0.0:50051");
     PaymentServiceImpl service;
 
     grpc::ServerBuilder builder;
@@ -159,6 +189,7 @@ void RunServer() {
 }
 
 int main() {
+    load_env();
     RunServer();
     return 0;
 }

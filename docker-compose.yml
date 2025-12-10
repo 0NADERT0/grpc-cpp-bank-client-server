@@ -1,0 +1,49 @@
+version: '3.8'
+
+services:
+  grpc-server:
+    image: ver16
+    container_name: grpcq2
+    tty: true
+    stdin_open: true
+    ports:
+      - "50051:50051"
+    environment:
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_USER=grpcuser
+      - DB_PASSWORD=grpcpass
+      - DB_NAME=grpcdb
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - grpc-network
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:15
+    container_name: postgres_db
+    environment:
+      POSTGRES_USER: grpcuser
+      POSTGRES_PASSWORD: grpcpass
+      POSTGRES_DB: grpcdb
+    volumes:
+      - postgres_dat:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U grpcuser -d grpcdb"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - grpc-network
+    restart: unless-stopped
+
+volumes:
+  postgres_dat:
+
+networks:
+  grpc-network:
+    driver: bridge
