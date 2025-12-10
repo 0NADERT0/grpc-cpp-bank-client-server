@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package payment;
+
+service PaymentService {
+    rpc TransferMoney (TransferRequest) returns (TransferResponse);
+    rpc CheckBalance (BalanceRequest) returns (BalanceResponse);
+    rpc GetTransactionHistory (HistoryRequest) returns (HistoryResponse);
+    rpc DepositMoney (DepositRequest) returns (DepositResponse);
+    rpc WithdrawMoney (WithdrawRequest) returns (WithdrawResponse);
+}
+
+message TransferRequest {
+    int32 sender_id = 1;
+    int32 receiver_id = 2;
+    double amount = 3;
+}
+
+message TransferResponse {
+    bool success = 1;
+    string message = 2;
+}
+
+message BalanceRequest {
+    int32 user_id = 1;
+}
+
+message BalanceResponse {
+    double balance = 1;
+}
+
+message DepositRequest {
+    int32 user_id = 1;
+    double amount = 2;
+}
+
+message DepositResponse {
+    double amount = 1;
+}
+
+message WithdrawRequest {
+    int32 user_id = 1;
+    double amount = 2;
+}
+
+message WithdrawResponse {
+    double amount = 1;
+}
+
+message HistoryRequest {
+    int32 user_id = 1;
+}
+
+message HistoryResponse {
+    repeated Transaction transactions = 1;
+}
+
+message Transaction {
+    int32 transaction_id = 1;
+    int32 sender_id = 2;
+    int32 receiver_id = 3;
+    double amount = 4;
+    string timestamp = 5;
+    string status = 6;
+}
