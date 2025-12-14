@@ -22,6 +22,17 @@ find_package(PostgreSQL REQUIRED)
 
 include_directories(${PostgreSQL_INCLUDE_DIRS} ${PQXX_INCLUDE_DIRS})
 
+add_library(dblib
+    src/db/postgres.cc
+    src/db/postgres.h
+    src/db/databaseInterface.h
+)
+target_include_directories(dblib
+    PUBLIC
+        ${CMAKE_CURRENT_SOURCE_DIR}
+        ${LIBPQXX_INCLUDE_DIRS}
+)
+
 add_library(protolib proto/payment_service.proto)
 target_link_libraries(protolib gRPC::grpc++)
 target_include_directories(protolib PUBLIC ${CMAKE_CURRENT_BINARY_DIR})
@@ -36,8 +47,11 @@ target_link_libraries(
     server
     PRIVATE
     protolib
+    dblib
+    gRPC::grpc++
+    protobuf::libprotobuf
     ${LIBPQXX_LIBRARIES}
-    pq
+    ${LIBPQ_LIBRARIES}
 )
 
 

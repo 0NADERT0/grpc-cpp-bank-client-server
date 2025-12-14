@@ -27,6 +27,7 @@ message BalanceRequest {
 
 message BalanceResponse {
     double balance = 1;
+    string message = 2;
 }
 
 message DepositRequest {

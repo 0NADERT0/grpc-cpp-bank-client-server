@@ -1,14 +1,16 @@
 #include <grpcpp/grpcpp.h>
+#include <iostream>
 #include <fstream>
 #include <sstream>
 #include <cstdlib>
 #include <memory>
 #include <string>
 #include "proto/payment_service.grpc.pb.h"
-#include <pqxx/pqxx>
+#include "src/db/postgres.h"
 
 using grpc::Server;
 using grpc::ServerBuilder;
+using std::pair;
 
 void load_env(const std::string& filename = ".env") {
     std::ifstream file(filename);
@@ -26,49 +28,40 @@ void load_env(const std::string& filename = ".env") {
     }
 }
 
-std::string db_user = getenv("DB_USER");
-std::string db_pass = getenv("DB_PASSWORD");
-std::string db_name = getenv("DB_NAME");
-std::string db_host = getenv("DB_HOST");
-std::string db_port = getenv("DB_PORT");
 
-pqxx::connection conn("user=" + db_user +
-                        " password=" + db_pass +
-                        " dbname=" + db_name +
-                        " host=" + db_host +
-                        " port=" + db_port);
 
-//pqxx::work txn(conn); // Delete this
+
+
 
 class PaymentServiceImpl final : public payment::PaymentService::Service {
+private:
+    PostgresDatabase* db;
+public:
+    PaymentServiceImpl(PostgresDatabase* database) : db(database) {}
     grpc::Status TransferMoney(grpc::ServerContext* context, const payment::TransferRequest* request, payment::TransferResponse* response) override {
         int sender_id = request->sender_id();
         int receiver_id = request->receiver_id();
         double amount = request->amount();
 
         try {
-            pqxx::work txn(conn);
-            pqxx::result sender_balance_result = txn.exec_params(
-                "SELECT balance FROM users WHERE user_id = $1", sender_id);
-            if (sender_balance_result.size() == 0) {
-                response->set_success(false);
-                response->set_message("Sender not found.");
-                return grpc::Status::OK;
+            bool result = db->TransferMoney(sender_id, receiver_id, amount);
+            if (result != 0) {
+                if (result == 1) {
+                    response->set_success(false);
+                    response->set_message("Sender not found.");
+                    return grpc::Status::OK;
+                }
+                else if (result == 2) {
+                    response->set_success(false);
+                    response->set_message("Receiver not found.");
+                    return grpc::Status::OK;
+                }
+                else if (result == 3) {
+                    response->set_success(false);
+                    response->set_message("Not enough money.");
+                    return grpc::Status::OK;
+                }
             }
-            double sender_balance = sender_balance_result[0][0].as<double>();
-            if (sender_balance < amount) {
-                response->set_success(false);
-                response->set_message("Not enough money.");
-                return grpc::Status::OK;
-            }
-
-            txn.exec_params("UPDATE users SET balance = balance - $1 WHERE user_id = $2", amount, sender_id);
-            txn.exec_params("UPDATE users SET balance = balance + $1 WHERE user_id = $2", amount, receiver_id);
-
-            txn.exec_params("INSERT INTO transactions (sender_id, receiver_id, amount, status) VALUES ($1, $2, $3, 'transfer')",
-            sender_id, receiver_id, amount);
-
-            txn.commit();
             response->set_success(true);
             response->set_message("Transfer successful.");
         }
@@ -83,11 +76,12 @@ class PaymentServiceImpl final : public payment::PaymentService::Service {
     grpc::Status CheckBalance(grpc::ServerContext* context, const payment::BalanceRequest* request, payment::BalanceResponse* response) override {
         int sender_id = request->user_id();
         try {
-            pqxx::work txn(conn);
-            pqxx::result sender_balance_result = txn.exec_params(
-                "SELECT balance FROM users WHERE user_id = $1", sender_id);
-            double sender_balance = sender_balance_result[0][0].as<double>();
-            response->set_balance(sender_balance);
+            pair<double, bool> balance = db->GetBalance(sender_id);
+            if (balance.second != 0) {
+                response->set_message("User not found.");
+                return grpc::Status::OK;
+            }
+            response->set_balance(balance.first);
         }
         catch (const std::exception& e) {
             std::cerr << ("Database error: " + std::string(e.what()));
@@ -99,30 +93,16 @@ class PaymentServiceImpl final : public payment::PaymentService::Service {
     grpc::Status GetTransactionHistory(grpc::ServerContext* context, const payment::HistoryRequest* request, payment::HistoryResponse* response) override {
         int sender_id = request->user_id();
         try {
-            pqxx::read_transaction txn(conn);
-            pqxx::result sender_transactions = txn.exec_params(
-                "SELECT * FROM transactions WHERE sender_id = $1", sender_id);
-            pqxx::result receiver_transactions = txn.exec_params(
-                "SELECT * FROM transactions WHERE receiver_id = $1", sender_id);
+            std::vector<Transaction> out = db->GetTransactions(sender_id);
 
-            for (const auto& row : sender_transactions) {
+            for (const auto& row : out) {
                 payment::Transaction* transaction = response->add_transactions();
-                transaction->set_transaction_id(row["transaction_id"].as<int>());
-                transaction->set_sender_id(row["sender_id"].as<int>());
-                transaction->set_receiver_id(row["receiver_id"].as<int>());
-                transaction->set_amount(row["amount"].as<double>());
-                transaction->set_timestamp(row["timestamp"].as<std::string>());
-                transaction->set_status(row["status"].as<std::string>());
-            }
-
-            for (const auto& row : receiver_transactions) {
-                payment::Transaction* transaction = response->add_transactions();
-                transaction->set_transaction_id(row["transaction_id"].as<int>());
-                transaction->set_sender_id(row["sender_id"].as<int>());
-                transaction->set_receiver_id(row["receiver_id"].as<int>());
-                transaction->set_amount(row["amount"].as<double>());
-                transaction->set_timestamp(row["timestamp"].as<std::string>());
-                transaction->set_status(row["status"].as<std::string>());
+                transaction->set_transaction_id(row.transaction_id);
+                transaction->set_sender_id(row.sender_id);
+                transaction->set_receiver_id(row.receiver_id);
+                transaction->set_amount(row.amount);
+                transaction->set_timestamp(row.timestamp);
+                transaction->set_status(row.status);
             }
         }
         catch (const std::exception& e) {
@@ -136,12 +116,7 @@ class PaymentServiceImpl final : public payment::PaymentService::Service {
         int sender_id = request->user_id();
         double amount = request->amount();
         try {
-            pqxx::work txn(conn);
-            txn.exec_params("UPDATE users SET balance = balance + $1 WHERE user_id = $2", amount, sender_id);
-
-            txn.exec_params("INSERT INTO transactions (sender_id, receiver_id, amount, status) VALUES ($1, $2, $3, 'deposit')",
-            sender_id, sender_id, amount);
-            txn.commit();
+            db->DepositMoney(sender_id, amount);
         }
         catch (const std::exception& e) {
             std::cerr << ("Database error: " + std::string(e.what()));
@@ -154,22 +129,11 @@ class PaymentServiceImpl final : public payment::PaymentService::Service {
         int sender_id = request->user_id();
         double amount = request->amount();
         try {
-            pqxx::work txn(conn);
-            pqxx::result sender_balance_result = txn.exec_params(
-                "SELECT balance FROM users WHERE user_id = $1", sender_id);
-            double sender_balance = sender_balance_result[0][0].as<double>();
-            if (sender_balance < amount) {
-                return grpc::Status::CANCELLED;
-            }
-            else if (amount <= 0) {
-                return grpc::Status::CANCELLED;
-            }
-            else{
-                txn.exec_params("UPDATE users SET balance = balance - $1 WHERE user_id = $2", amount, sender_id);
-
-                txn.exec_params("INSERT INTO transactions (sender_id, receiver_id, amount, status) VALUES ($1, $2, $3, 'withdrawal')",
-                sender_id, sender_id, amount);
-                txn.commit();
+            int result = db->WithdrawMoney(sender_id, amount);
+            if (result != 0) {
+                if (result == 1) {
+                    return grpc::Status::CANCELLED;
+                }
             }
         }
         catch (const std::exception& e) {
@@ -180,9 +144,9 @@ class PaymentServiceImpl final : public payment::PaymentService::Service {
     }
 };
 
-void RunServer() {
+void RunServer(PostgresDatabase* db) {
     std::string server_address("0.0.0.0:50051");
-    PaymentServiceImpl service;
+    PaymentServiceImpl service(db);
 
     grpc::ServerBuilder builder;
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
@@ -195,6 +159,18 @@ void RunServer() {
 
 int main() {
     load_env();
-    RunServer();
+    std::string db_user = getenv("DB_USER");
+    std::string db_pass = getenv("DB_PASSWORD");
+    std::string db_name = getenv("DB_NAME");
+    std::string db_host = getenv("DB_HOST");
+    std::string db_port = getenv("DB_PORT");
+
+    const std::string conn("user=" + db_user +
+                            " password=" + db_pass +
+                            " dbname=" + db_name +
+                            " host=" + db_host +
+                            " port=" + db_port);
+    PostgresDatabase db(conn);
+    RunServer(&db);
     return 0;
 }
