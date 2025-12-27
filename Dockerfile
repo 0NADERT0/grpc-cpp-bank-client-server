@@ -25,6 +25,5 @@ RUN git clone --recurse-submodules -b v1.71.0 --depth 1 --shallow-submodules htt
     cd ../../.. && \
     rm -rf grpc
 
-
 WORKDIR /app
 COPY . .
