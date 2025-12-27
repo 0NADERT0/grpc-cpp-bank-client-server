@@ -1,0 +1,59 @@
+name: Unit Tests CI
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y \
+          build-essential \
+          cmake \
+          libgtest-dev \
+          google-mock \
+          libgrpc++-dev \
+          libgrpc-dev \
+          libpqxx-dev \
+          libpq-dev \
+          protobuf-compiler
+    
+    - name: Configure CMake
+      run: |
+        mkdir build
+        cd build
+        cmake -DCMAKE_BUILD_TYPE=Release ..
+    
+    - name: Build tests
+      run: |
+        cd build
+        make payment_service_tests
+    
+    - name: Run tests
+      run: |
+        cd build
+        ./tests/payment_service_tests --gtest_output=xml:test-results.xml
+    
+    - name: Upload test results
+      if: always()
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results
+        path: build/test-results.xml
+    
+    - name: Publish test report
+      if: always()
+      uses: dorny/test-reporter@v1
+      with:
+        name: GTest Results
+        path: build/test-results.xml
+        reporter: 'java-junit'
