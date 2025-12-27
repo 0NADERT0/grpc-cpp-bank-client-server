@@ -73,20 +73,3 @@ jobs:
         cd build
         mkdir -p test-output
         ./tests/payment_service_tests --gtest_output=xml:test-output/results.xml
-
-    - name: Upload test results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: test-results
-        path: build/test-output/results.xml
-        if-no-files-found: warn
-
-    - name: Publish test report
-      if: always()
-      uses: dorny/test-reporter@v1
-      with:
-        name: GTest Results
-        path: build/test-output/results.xml
-        reporter: java-junit
-        fail-on-error: false
