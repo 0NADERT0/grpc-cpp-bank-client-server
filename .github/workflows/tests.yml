@@ -27,22 +27,37 @@ jobs:
           libgrpc-dev \
           libpqxx-dev \
           libpq-dev \
-          protobuf-compiler
+          protobuf-compiler \
+          libprotobuf-dev \
+          pkg-config
     
-    - name: Display structure
+    - name: Initialize and update submodules
       run: |
-        echo "=== Project Structure ==="
-        ls -la
-        echo "=== CMakeLists.txt exists ==="
-        test -f CMakeLists.txt && echo "✓ Found" || echo "✗ Not found"
-        echo "=== tests dir exists ==="
-        test -d tests && echo "✓ Found" || echo "✗ Not found"
+        git submodule sync --recursive
+        git submodule update --init --recursive --force
+        echo "=== Verifying submodule ==="
+        test -d other/googletest && echo "✓ googletest found" || echo "✗ googletest missing"
     
-    - name: Configure CMake
+    - name: Locate Protobuf & Configure CMake
       run: |
         mkdir -p build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_FLAGS="-std=c++17" ..
+        
+        echo "=== Detecting Protobuf with pkg-config ==="
+        pkg-config --cflags --libs protobuf
+        
+        PROTOBUF_CFLAGS=$(pkg-config --cflags protobuf)
+        PROTOBUF_LIBS=$(pkg-config --libs protobuf)
+        
+        echo "PROTOBUF_CFLAGS: ${PROTOBUF_CFLAGS}"
+        echo "PROTOBUF_LIBS: ${PROTOBUF_LIBS}"
+        
+        echo ""
+        echo "=== Running CMake ==="
+        cmake -DCMAKE_BUILD_TYPE=Release \
+              -DCMAKE_CXX_FLAGS="-std=c++17 ${PROTOBUF_CFLAGS}" \
+              -DCMAKE_EXE_LINKER_FLAGS="${PROTOBUF_LIBS}" \
+              ..
     
     - name: Build tests
       run: |
@@ -58,8 +73,7 @@ jobs:
     - name: Check test output
       if: always()
       run: |
-        echo "=== Looking for test results ==="
-        find build -name "*.xml" -o -name "payment_service_tests"
+        echo "=== Test Results ==="
         ls -la build/test-output/ || echo "No test-output directory"
     
     - name: Upload test results
