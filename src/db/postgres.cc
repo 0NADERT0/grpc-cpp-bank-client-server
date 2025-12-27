@@ -30,7 +30,7 @@ int PostgresDatabase::TransferMoney(int sender_id, int receiver_id, double amoun
                                                sender_id, receiver_id, amount);
 
     txn.commit();
-    return 0;
+    return 0; //success
 }
 
 std::pair<double, bool> PostgresDatabase::GetBalance(int user_id) {
