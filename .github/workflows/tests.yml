@@ -29,8 +29,26 @@ jobs:
           libpq-dev \
           protobuf-compiler \
           libprotobuf-dev \
-          grpc-tools \
           pkg-config
+    
+    - name: Build gRPC plugin from source
+      run: |
+        if [ ! -f /usr/bin/grpc_cpp_plugin ]; then
+          echo "Building grpc_cpp_plugin from source..."
+          cd /tmp
+          git clone --depth 1 https://github.com/grpc/grpc.git || true
+          if [ -d grpc ]; then
+            cd grpc
+            mkdir -p cmake/build
+            cd cmake/build
+            cmake ../.. -DCMAKE_BUILD_TYPE=Release -DgRPC_BUILD_TESTS=OFF
+            make grpc_cpp_plugin -j$(nproc)
+            sudo cp grpc_cpp_plugin /usr/local/bin/
+            sudo ln -sf /usr/local/bin/grpc_cpp_plugin /usr/bin/grpc_cpp_plugin || true
+          fi
+        else
+          echo "grpc_cpp_plugin already exists"
+        fi
     
     - name: Initialize and update submodules
       run: |
@@ -42,8 +60,6 @@ jobs:
       run: |
         mkdir -p build
         cd build
-        
-        echo "=== CMake Configuration ==="
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_CXX_FLAGS="-std=c++17" \
               -DProtobuf_INCLUDE_DIR=/usr/include \
