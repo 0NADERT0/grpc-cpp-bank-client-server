@@ -29,6 +29,7 @@ jobs:
           libpq-dev \
           protobuf-compiler \
           libprotobuf-dev \
+          grpc-tools \
           pkg-config
     
     - name: Initialize and update submodules
@@ -37,26 +38,16 @@ jobs:
         git submodule update --init --recursive --force
         test -d other/googletest && echo "✓ googletest found" || echo "✗ googletest missing"
     
-    - name: Configure CMake with explicit Protobuf paths
+    - name: Configure CMake
       run: |
         mkdir -p build
         cd build
         
-        echo "=== Finding Protobuf includes ==="
-        PROTOBUF_INCLUDE_DIR=$(dpkg -L libprotobuf-dev | grep "include" | grep -v "/google" | head -1 | xargs dirname)
-        echo "PROTOBUF_INCLUDE_DIR: ${PROTOBUF_INCLUDE_DIR}"
-        
-        echo "=== Finding Protobuf library ==="
-        PROTOBUF_LIBRARY=$(dpkg -L libprotobuf-dev | grep "libprotobuf.so" | head -1)
-        echo "PROTOBUF_LIBRARY: ${PROTOBUF_LIBRARY}"
-        
-        echo ""
-        echo "=== Running CMake ==="
+        echo "=== CMake Configuration ==="
         cmake -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_CXX_FLAGS="-std=c++17" \
-              -DProtobuf_INCLUDE_DIR="${PROTOBUF_INCLUDE_DIR}" \
-              -DProtobuf_LIBRARY="${PROTOBUF_LIBRARY}" \
-              -DCMAKE_MODULE_PATH=/usr/share/cmake-3.22/Modules \
+              -DProtobuf_INCLUDE_DIR=/usr/include \
+              -DProtobuf_LIBRARY=/usr/lib/x86_64-linux-gnu/libprotobuf.so \
               ..
     
     - name: Build tests
