@@ -28,10 +28,3 @@ RUN git clone --recurse-submodules -b v1.71.0 --depth 1 --shallow-submodules htt
 
 WORKDIR /app
 COPY . .
-
-RUN mkdir build && \
-    cd build && \
-    cmake .. && \
-    make
-
-CMD ["./build/server"]

@@ -1,10 +1,40 @@
-add_executable(banking_tests payment_test.cc)
+# tests/CMakeLists.txt
 
-target_link_libraries(
-    banking_tests
-    gtest
-    gtest_main
-    pthread
+enable_testing()
+include(GoogleTest)
+
+# Find Protobuf FIRST - BEFORE gRPC
+find_package(Protobuf CONFIG REQUIRED)
+find_package(gRPC CONFIG REQUIRED)
+find_package(PkgConfig REQUIRED)
+pkg_check_modules(LIBPQXX REQUIRED libpqxx)
+find_package(PostgreSQL REQUIRED)
+
+add_executable(payment_service_tests
+    payment_service_tests.cc
+    ../src/db/postgres.cc
 )
 
-add_test(NAME BankingTests COMMAND banking_tests)
+target_include_directories(payment_service_tests
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/..
+        ${CMAKE_CURRENT_SOURCE_DIR}/../src
+        ${CMAKE_CURRENT_BINARY_DIR}/..
+        ${LIBPQXX_INCLUDE_DIRS}
+        ${PostgreSQL_INCLUDE_DIRS}
+)
+
+target_link_libraries(payment_service_tests
+    PRIVATE
+        gtest
+        gtest_main
+        gmock
+        protolib
+        gRPC::grpc++
+        protobuf::libprotobuf
+        ${LIBPQXX_LIBRARIES}
+        ${PostgreSQL_LIBRARIES}
+        pthread
+)
+
+gtest_discover_tests(payment_service_tests)
