@@ -5,78 +5,75 @@ on:
     branches: [ main, develop ]
   pull_request:
     branches: [ main, develop ]
+  workflow_dispatch:
 
 jobs:
   test:
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v4
       with:
         submodules: recursive
-    
+
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y \
           build-essential \
           cmake \
+          pkg-config \
+          git \
           libgtest-dev \
           google-mock \
-          libgrpc++-dev \
-          libgrpc-dev \
-          libpqxx-dev \
           libpq-dev \
+          libpqxx-dev \
           protobuf-compiler \
           libprotobuf-dev \
-          pkg-config
-    
-    - name: Build gRPC plugin from source
-      run: |
-        if [ ! -f /usr/bin/grpc_cpp_plugin ]; then
-          echo "Building grpc_cpp_plugin from source..."
-          cd /tmp
-          git clone --depth 1 https://github.com/grpc/grpc.git || true
-          if [ -d grpc ]; then
-            cd grpc
-            mkdir -p cmake/build
-            cd cmake/build
-            cmake ../.. -DCMAKE_BUILD_TYPE=Release -DgRPC_BUILD_TESTS=OFF
-            make grpc_cpp_plugin -j$(nproc)
-            sudo cp grpc_cpp_plugin /usr/local/bin/
-            sudo ln -sf /usr/local/bin/grpc_cpp_plugin /usr/bin/grpc_cpp_plugin || true
-          fi
-        else
-          echo "grpc_cpp_plugin already exists"
-        fi
-    
+          protobuf-compiler-grpc \
+          libgrpc-dev \
+          libgrpc++-dev
+
+        echo "=== Tooling check ==="
+        which protoc
+        protoc --version || true
+        which grpc_cpp_plugin
+        grpc_cpp_plugin --version || true
+
     - name: Initialize and update submodules
       run: |
         git submodule sync --recursive
         git submodule update --init --recursive --force
-        test -d other/googletest && echo "✓ googletest found" || echo "✗ googletest missing"
-    
+        test -d other/googletest && echo "✓ googletest found" || (echo "✗ googletest missing" && exit 1)
+
     - name: Configure CMake
       run: |
         mkdir -p build
         cd build
-        cmake -DCMAKE_BUILD_TYPE=Release \
-              -DCMAKE_CXX_FLAGS="-std=c++17" \
-              -DProtobuf_INCLUDE_DIR=/usr/include \
-              -DProtobuf_LIBRARY=/usr/lib/x86_64-linux-gnu/libprotobuf.so \
-              ..
-    
+
+        echo "=== Protobuf headers check ==="
+        test -f /usr/include/google/protobuf/stubs/common.h && echo "✓ protobuf headers OK" || (echo "✗ protobuf headers missing" && exit 1)
+
+        echo "=== Configure ==="
+        cmake .. \
+          -DCMAKE_BUILD_TYPE=Release \
+          -DCMAKE_CXX_STANDARD=17 \
+          -DProtobuf_INCLUDE_DIR=/usr/include \
+          -DProtobuf_LIBRARY=/usr/lib/x86_64-linux-gnu/libprotobuf.so \
+          -DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc \
+          -DgRPC_CPP_PLUGIN_EXECUTABLE=/usr/bin/grpc_cpp_plugin
+
     - name: Build tests
       run: |
         cd build
-        make payment_service_tests -j$(nproc)
-    
+        cmake --build . --target payment_service_tests -j$(nproc)
+
     - name: Run tests
       run: |
         cd build
         mkdir -p test-output
-        ./tests/payment_service_tests --gtest_output=xml:test-output/results.xml || true
-    
+        ./tests/payment_service_tests --gtest_output=xml:test-output/results.xml
+
     - name: Upload test results
       if: always()
       uses: actions/upload-artifact@v4
@@ -84,12 +81,12 @@ jobs:
         name: test-results
         path: build/test-output/results.xml
         if-no-files-found: warn
-    
+
     - name: Publish test report
       if: always()
       uses: dorny/test-reporter@v1
       with:
         name: GTest Results
         path: build/test-output/results.xml
-        reporter: 'java-junit'
+        reporter: java-junit
         fail-on-error: false
