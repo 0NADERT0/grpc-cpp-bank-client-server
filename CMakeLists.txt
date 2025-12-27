@@ -9,7 +9,10 @@ add_subdirectory(other/googletest)
 enable_testing()
 add_subdirectory(tests)
 
-find_package(Protobuf CONFIG REQUIRED)
+set(CMAKE_FIND_PACKAGE_PREFER_CONFIG TRUE)
+find_package(Protobuf REQUIRED)
+unset(CMAKE_FIND_PACKAGE_PREFER_CONFIG)
+
 find_package(gRPC CONFIG REQUIRED)
 
 find_package(PkgConfig REQUIRED)
