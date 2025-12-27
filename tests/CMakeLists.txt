@@ -3,7 +3,6 @@
 enable_testing()
 include(GoogleTest)
 
-# Find Protobuf FIRST - BEFORE gRPC
 find_package(Protobuf CONFIG REQUIRED)
 find_package(gRPC CONFIG REQUIRED)
 find_package(PkgConfig REQUIRED)
